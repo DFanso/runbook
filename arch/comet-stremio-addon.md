@@ -138,5 +138,38 @@ twice over, so only do it deliberately.
 
 ## server-dash integration
 
-Comet status and tunnel URL are shown in the server-dash dashboard at `http://192.168.1.3:8080`.
-The dashboard polls `/api/comet` every 10 seconds and has a "Restart tunnel" button.
+The Comet card on the dashboard (`http://192.168.1.3:8080`) polls `/api/comet`
+every 10s and shows:
+
+- Reachability + addon version
+- Current Cloudflare tunnel URL, with copy and **Restart tunnel** buttons
+- Index stats — torrents indexed, searches in the last 24h, avg seeders, avg size
+- Movies/series split, and proxied stream count when the stream proxy is on
+- Top 4 sources by torrent count
+
+### Admin API auth
+
+The stats come from Comet's `/admin/api/metrics` and `/admin/api/connections`,
+which need the admin session cookie. server-dash logs in itself
+(`POST /admin/login`, form-encoded `password`), caches the `admin_session`
+cookie, and re-authenticates on a 401.
+
+The password is read from `COMET_ADMIN_PASSWORD`. Like the v2rayA credentials it
+lives in the root-only systemd drop-in, **never** in the repo:
+
+```bash
+# /etc/systemd/system/server-dash.service.d/secrets.conf  (0600, root)
+Environment=COMET_ADMIN_PASSWORD=<ADMIN_DASHBOARD_PASSWORD from comet .env>
+```
+
+```bash
+systemctl daemon-reload && systemctl restart server-dash
+curl -s localhost:8080/api/comet | python3 -m json.tool   # stats should be non-null
+```
+
+Without the variable the card degrades gracefully — liveness and tunnel URL
+still work, `stats` is just `null`.
+
+> Don't set `PUBLIC_METRICS_API=True` as a shortcut. The Cloudflare tunnel makes
+> port 8000 reachable from the internet, so that would publish the index stats
+> publicly.
